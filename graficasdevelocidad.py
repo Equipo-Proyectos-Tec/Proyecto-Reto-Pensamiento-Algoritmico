@@ -13,31 +13,34 @@ def main():
     print(matrix.columns.tolist())
     matrix = tt.m()
     matrix = dropreport(matrix, averages)
+    print(matrix.describe())
     map(matrix)
     samplegraphs(mspeeds, point_distances, sample_ids)
 
 def dropreport(matrix, averages):
     min_meters = 100
     min_seconds = 30
-    manual_ids = [31, 51, 38039, 38108, 54, 55, 56]  # Use [] for cutoffs alone
+    manual_ids = [31, 51, 38039, 38018, 54, 55, 56]  # Use [] for cutoffs alone
 
     # One row per track, including tracks with only one recorded point
     track_ids = matrix["track_id"].drop_duplicates()
     report = averages[["Distance(m)", "tseconds"]].reindex(track_ids).fillna(0)
 
+    #returns true or false, if true it its under the cut off line
     under_distance = report["Distance(m)"] < min_meters
     under_time = report["tseconds"] < min_seconds
     on_manual_list = report.index.isin(manual_ids)
-
+    #check what is under the cutooff | meas or.
     below_cutoff = under_distance | under_time
     dropped = report.loc[below_cutoff | on_manual_list]
-
+    #len report give the total amount of routes first argument give how many are dropped
     print(f"{below_cutoff.sum()} of {len(report)} routes are below a cutoff.")
+    #how many are dropped in total including manual
     print(f"{len(dropped)} routes dropped in total.")
 
-    # Each dropped track belongs to exactly one row in the table
-    eligible_for_cutoffs = ~on_manual_list
+    eligible_for_cutoffs = ~on_manual_list #prioritizes manual cut offi n the table if its on the list it wont be checked for the other options
 
+    #dictionary
     groups = {
         "Manual exclusion": on_manual_list,
         f"Under {min_meters} m only": eligible_for_cutoffs & under_distance & ~under_time,
@@ -45,30 +48,23 @@ def dropreport(matrix, averages):
         "Under both cutoffs": eligible_for_cutoffs & under_distance & under_time,
     }
 
+    #table heater
     width = 80
     print(f"\n{'Reason':<24} {'Listed':>6} {'Dropped':>7}  Track IDs")
     print("-" * width)
 
-    for reason, matches in groups.items():
-        matched_ids = report.index[matches].sort_values()
-
-        if reason == "Manual exclusion":
+    for reason, matches in groups.items(): # cheacks each dictionary entry. for the reason and value
+        matched_ids = report.index[matches].sort_values() # selects coditiosn which have True. sor values put it in ascending order
+        if reason == "Manual exclusion": # if manual excluded it is ecual to manual id
             listed_ids = manual_ids
         else:
             listed_ids = matched_ids
-
-        ids_text = ", ".join(
-            str(i) if i in report.index else f"{i} (absent)"
-            for i in listed_ids
-        ) or "—"
-
+        # convertis each id to text and joins it with a comma, if no ids = -
+        ids_text = ", ".join(str(i) if i in report.index else f"{i} (absent)"for i in listed_ids) or "—"
         label = f"{reason:<24} {len(listed_ids):>6} {len(matched_ids):>7}  "
-        print(fill(
-            ids_text,
-            width=width,
-            initial_indent=label,
-            subsequent_indent=" " * len(label),
-        ))
+
+        print(fill(ids_text,width=width,initial_indent=label,subsequent_indent=" " * len(label),))
+
     return matrix.loc[~matrix["track_id"].isin(dropped.index)].copy()
 
 def samplegraphs(mspeeds,totaldistance, sample_ids):
