@@ -1,17 +1,20 @@
 import pandas as pd
 from geopy.distance import geodesic
 #reads file with the data
-matrix = pd.read_csv("/Users/gabrielburbano/Desktop/Situacion problema/go_track_trackspoints.csv")
-matrix["track_order"] = matrix.groupby("track_id", sort=False).ngroup()
-matrix = matrix.sort_values("track_order", kind="stable").drop(columns="track_order")
+def m():
+    matrix = pd.read_csv("/Users/gabrielburbano/Desktop/Situacion problema/go_track_trackspoints.csv")
+    matrix["track_order"] = matrix.groupby("track_id", sort=False).ngroup()
+    matrix = matrix.sort_values("track_order", kind="stable").drop(columns="track_order")
+    return matrix
 
 def calcs():
+    matrix = m()
     matrixcoordiantes = matrix.drop(columns=["time"])
     time = matrix.drop(columns=["longitude", "latitude"])
     total_time, point_times = convert_time(time)
     total_distance, point_distances = get_distance(matrixcoordiantes)
-    mspeeds, averages = calcspeed(point_times, point_distances, total_distance, total_time)
-    return mspeeds, averages,point_times, point_distances
+    mspeeds, averages, sample_ids, points = calcspeed(point_times, point_distances, total_distance, total_time)
+    return mspeeds, averages,point_times, point_distances, sample_ids, points
 
 
 #get time taken in seconds form each point and overall per track
@@ -87,7 +90,7 @@ def calcspeed(times, distances, totaldistance, totaltime):
     averages = totaldistance.join(totaltime)#joins both matrixes
     duration = averages["tseconds"]# makes a list of the vergaes
     averages["avg_speed"] = averages["Distance(m)"] / duration.where(duration > 0) #gets avg speeds
-    return mspeeds, averages
+    return mspeeds, averages, sample_ids, points
     #calcualte avg vleocities and plot them
 
 if __name__ == "__main__":
