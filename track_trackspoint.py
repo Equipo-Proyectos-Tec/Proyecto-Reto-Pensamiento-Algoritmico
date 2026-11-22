@@ -1,14 +1,17 @@
 import pandas as pd
-from math import dist
 from geopy.distance import geodesic
 #reads file with the data
 matrix = pd.read_csv("/Users/gabrielburbano/Desktop/Situacion problema/go_track_trackspoints.csv")
+matrix["track_order"] = matrix.groupby("track_id", sort=False).ngroup()
+matrix = matrix.sort_values("track_order", kind="stable").drop(columns="track_order")
 
-def main():
+def calcs():
     matrixcoordiantes = matrix.drop(columns=["time"])
     time = matrix.drop(columns=["longitude", "latitude"])
-    convert_time(time)
-    get_distance(matrixcoordiantes)
+    total_time, point_times = convert_time(time)
+    total_distance, point_distances = get_distance(matrixcoordiantes)
+    mspeeds, averages = calcspeed(point_times, point_distances, total_distance, total_time)
+    return mspeeds, averages,point_times, point_distances
 
 
 #get time taken in seconds form each point and overall per track
@@ -31,23 +34,61 @@ def convert_time(time):
         if pd.notna(seconds):
             total.loc[track_id, "tseconds"] += seconds #gives a matrix with the total of seconds per track
 
-    print(total.reset_index)
+    return total, time
     #print matrix, there should be 38093 rows including titles. There is only 162221 = some # are skipepd in the csv
-    #checking cvs there are jumps between id of up to 4, plus there is a couple hundred vlaues drop due to drop.na
+    #checking cvs there are jumps between id of up to 4, plus there is a couple hundred vlaues dropped due to drop.na
 
 # gets distance between points and give the overall
 def get_distance(points): # matrix has first id, then latitude, lognitude and lastly track_id.
-    totaldistance = pd.DataFrame(columns=["track_id","Distance(m)"])
+    #creates matrix for the total
+    totaldistance = pd.DataFrame()
     totaldistance["track_id"] = points["track_id"].unique()
-    totaldistance["Distance(m)"] = 0.0
-    perpoint = points.copy(points)
-    perpoints = perpoint.drop(columns=["longitude", "latitude"])
-    total = 0
-    for i in range(1, len(points)):
-        start = tuple((points.loc[i-1,"latitude"], points.loc[i-1, "longitude"])) # Previous row as (latitude, longitude)
-        end = tuple((points.loc[i,"latitude"], points.loc[i, "longitude"]))  # Current row as (latitude, longitude)
+    totaldistance["Distance(m)"] = 0.0 #sets all the rows to zero to be able to add, importnat to be a float
+    totaldistance = totaldistance.set_index("track_id")
 
+    #creates a matrix for the in point analisis
+    perpoint = points.drop(columns=["longitude", "latitude"]) # only ids and distance to pair with seconds
+    perpoint["Distance(m)"] = 0.0 # sets all zero to change as a float
+    for i in range(1,len(points)):
+        previous = points.iloc[i-1] # get the rpevious row
+        current = points.iloc[i]# get the current row
+        track_id = current["track_id"]
+        if previous["track_id"] != track_id: #if previous row doesnt have the same track id continue
+            continue
+        start = (previous["latitude"], previous["longitude"])# Previous row as (latitude, longitude)
+        end = (current["latitude"], current["longitude"])# Current row as (latitude, longitude)
+        distance_m = geodesic(start, end).meters #calculates the lenght between points in meter
 
+        point_row = points.index[i]
+        perpoint.loc[point_row, "Distance(m)"] = distance_m
+        totaldistance.loc[track_id, "Distance(m)"] += distance_m
+
+    return totaldistance, perpoint
+
+def calcspeed(times, distances, totaldistance, totaltime):
+    sample_positions = [11,53,77,82,131,140]
+    track_ids = totaldistance.index.tolist()
+    #match is, and do every point in that id
+    sample_ids = [track_ids[i - 1] for i in sample_positions]
+    print(pd.DataFrame({"section": sample_positions, "track_id": sample_ids}))
+
+    points = distances.merge(
+        times[["track_id", "id", "seconds"]],
+        on=["track_id", "id"],
+        how="left",
+        validate="one_to_one",
+    ) # new maitris, merges distnaces with respective times
+    seconds = points["seconds"]
+    points["speed"] = points["Distance(m)"] / seconds.where(seconds >0)
+    # Keep every point belonging to the six selected tracks
+    mspeeds = points.loc[points["track_id"].isin(sample_ids)].copy()
+
+    #calcualtes avg speeds
+    averages = totaldistance.join(totaltime)#joins both matrixes
+    duration = averages["tseconds"]# makes a list of the vergaes
+    averages["avg_speed"] = averages["Distance(m)"] / duration.where(duration > 0) #gets avg speeds
+    return mspeeds, averages
+    #calcualte avg vleocities and plot them
 
 if __name__ == "__main__":
-    main()
+    calcs()
