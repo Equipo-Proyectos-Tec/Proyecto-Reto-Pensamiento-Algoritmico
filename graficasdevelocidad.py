@@ -12,8 +12,8 @@ def main():
     print(averages.describe())
     print(matrix.columns.tolist())
     matrix = tt.m()
-    matrix = dropreport(matrix, averages)
-    print(matrix.describe())
+    matrix, averages = dropreport(matrix, averages)
+    print(averages.describe())
     map(matrix)
     samplegraphs(mspeeds, point_distances, sample_ids)
 
@@ -65,7 +65,8 @@ def dropreport(matrix, averages):
 
         print(fill(ids_text,width=width,initial_indent=label,subsequent_indent=" " * len(label),))
 
-    return matrix.loc[~matrix["track_id"].isin(dropped.index)].copy()
+    dropped_ids = dropped.index
+    return (matrix.loc[~matrix["track_id"].isin(dropped_ids)].copy(), averages.loc[~averages.index.isin(dropped_ids)].copy(),)
 
 def samplegraphs(mspeeds,totaldistance, sample_ids):
     plt.figure(figsize=(12, 7)) # to show case all six graphs at once
