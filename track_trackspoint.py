@@ -72,7 +72,7 @@ def get_distance(points): # matrix has first id, then latitude, lognitude and la
     return totaldistance, perpoint
 
 def calcspeed(times, distances, totaldistance, totaltime):
-    sample_positions = [11,53,77,82,131,140]
+    sample_positions = [11, 77, 131]
     track_ids = totaldistance.index.tolist()
     #match is, and do every point in that id
     sample_ids = [track_ids[i - 1] for i in sample_positions]

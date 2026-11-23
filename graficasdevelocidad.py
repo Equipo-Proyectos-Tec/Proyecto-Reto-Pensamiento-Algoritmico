@@ -2,7 +2,8 @@ import track_trackspoint as tt
 import matplotlib.pyplot as plt
 import folium
 from textwrap import fill
-
+import pandas as pd
+from math import ceil
 
 #main will call all the graph creation
 def main():
@@ -15,7 +16,11 @@ def main():
     matrix, averages = dropreport(matrix, averages)
     print(averages.describe())
     map(matrix)
+    histograma_velocidades(averages)
+    velocidades_tercios = boxplots_tercios(matrix, point_distances)
+    print(velocidades_tercios.head().round(2))
     samplegraphs(mspeeds, point_distances, sample_ids)
+
 
 def dropreport(matrix, averages):
     min_meters = 100
@@ -77,6 +82,7 @@ def samplegraphs(mspeeds,totaldistance, sample_ids):
 
         plt.subplot(2, 3, panel)
         plt.plot(elapsed, track["speed"])
+        plt.ylim(0, 25)
         plt.title(f"Track {i}")
         plt.xlabel("Elapsed time (s)")
         plt.ylabel("Speed (m/s)")
@@ -121,6 +127,71 @@ def map(points):
 
     route_map.save("gps_routes.html")
 
+def boxplots_tercios(matrix, point_distances):
+    # Une la hora de cada punto con la distancia desde el punto anterior
+    claves = ["track_id", "id"]
+    datos = matrix[claves + ["time"]].merge(
+        point_distances[claves + ["Distance(m)"]],
+        on=claves,
+        validate="one_to_one",
+    )
+    datos["time"] = pd.to_datetime(datos["time"])
+    datos = datos.sort_values(["track_id", "time", "id"])
+
+    filas = []
+    for track_id, ruta in datos.groupby("track_id", sort=False):
+        metros = ruta["Distance(m)"].cumsum().to_numpy()
+        segundos = (ruta["time"] - ruta["time"].iloc[0]).dt.total_seconds().to_numpy()
+        tercio_m = metros[-1] / 3
+
+        # Encuentra en qué segundo se alcanzó 1/3 y 2/3 de la distancia
+        cruces = []
+        for corte in (tercio_m, 2 * tercio_m):
+            j = metros.searchsorted(corte)
+            fraccion = (corte - metros[j - 1]) / (metros[j] - metros[j - 1])
+            tiempo_cruce = segundos[j - 1] + fraccion * (segundos[j] - segundos[j - 1])
+            cruces.append(tiempo_cruce)
+
+        t1, t2 = cruces
+        duraciones = [t1, t2 - t1, segundos[-1] - t2]
+        velocidades = [tercio_m / dt if dt > 0 else float("nan") for dt in duraciones]
+        filas.append([track_id, *velocidades])
+
+    # Una fila por ruta y una columna por tercio
+    etapas = ["Inicio", "Mitad", "Final"]
+    resumen = pd.DataFrame(filas, columns=["track_id", *etapas]).set_index("track_id")
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    resumen.boxplot(column=etapas, ax=ax, grid=False, showmeans=True)
+    ax.set_title(f"Velocidad media por tercio del recorrido ({len(resumen)} rutas)")
+    ax.set_ylabel("Velocidad media (m/s)")
+    fig.tight_layout()
+
+    return resumen
+
+def histograma_velocidades(averages):
+    velocidades = (averages["Distance(m)"] / averages["tseconds"]).dropna()
+    if velocidades.empty:
+        print("No hay rutas para graficar.")
+        return
+
+    # Elige un ancho entero que permita incluir la ruta más rápida
+    intervalos = 10
+    ancho = max(1, ceil(velocidades.max() / intervalos))
+    limite = intervalos * ancho
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    _, bordes, barras = ax.hist(
+        velocidades, bins=intervalos, range=(0, limite),
+        color="teal", edgecolor="white",
+    )
+
+    ax.set_xticks(bordes)
+    ax.bar_label(barras, fmt="%.0f", padding=3)
+    ax.set_title(f"Velocidad media por ruta ({len(velocidades)} rutas)")
+    ax.set_xlabel("Velocidad media de la ruta (m/s)")
+    ax.set_ylabel("Número de rutas")
+    fig.tight_layout()
 #test
 if __name__ == "__main__":
     main()
