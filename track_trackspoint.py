@@ -1,8 +1,11 @@
 import pandas as pd
 from geopy.distance import geodesic
+from pathlib import Path
+
 #reads file with the data
 def m():
-    matrix = pd.read_csv("/Users/gabrielburbano/Desktop/Situacion problema/go_track_trackspoints.csv")
+    repo_root = Path(__file__).resolve().parent.parent
+    matrix = pd.read_csv(repo_root / "CSVS/go_track_trackspoints.csv")
     matrix["track_order"] = matrix.groupby("track_id", sort=False).ngroup()
     matrix = matrix.sort_values("track_order", kind="stable").drop(columns="track_order")
     return matrix
